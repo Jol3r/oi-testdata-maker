@@ -1,0 +1,14 @@
+# Secrets / tokens must never be committed
+.gh_token
+*.token
+
+# Generated test data and build artifacts
+*.exe
+gen_*.o
+*.out.bak
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
