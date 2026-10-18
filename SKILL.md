@@ -134,7 +134,12 @@ whenToUse: User asks to 造数据/出数据/生成测试数据 based on 题面(s
 - **LemonLime**（现代版，SPJ 基于自带的 `testlib.h`＝GitPinkRabbit 的 [Testlib-for-Lemons](https://github.com/GitPinkRabbit/Testlib-for-Lemons)，入口 `registerLemonChecker`）；
 - **经典 Lemon**（老版，SPJ 自己 `fopen(argv[5],"w")` 写分数、`fopen(argv[6],"w")` 写报告）。
 
-两者的**参数完全一致**，所以优先用 Testlib-for-Lemons 的 `registerLemonChecker` 写法——同一份 `checker.exe` 在两种评测机上都能跑：
+两者的**参数完全一致**，所以同一份 `checker.exe` 在两种评测机上都能跑。写法有两种，都能用：
+
+- **lemon 模式**（推荐，见 §4.3）：不依赖 testlib，自己打开 `argv[1]/argv[2]`、创建 `argv[5]` 写分数、`argv[6]` 写报告；
+  少了"testlib 强制打开答案文件"和"`_fail` 分支崩溃"两个雷。
+- **Testlib-for-Lemons 的 `registerLemonChecker`**：判定写起来最省事（`inf/ouf` + `readInt` 自带范围校验），
+  但要接受上面两个雷，并且 `testlib.h` 必须与 `checker.cpp` 同目录。
 
 ```
 checker.exe <in> <out> <ans> <full_score> <score_file> <report_file>
