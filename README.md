@@ -83,6 +83,7 @@ cp SKILL.md .dsh/skills/oi-testdata-maker/SKILL.md
 | §8 | 交付清单与质量门 |
 | §9 | 下发文件（附加样例）：3~5 组逐级放大、不与评测点重复 |
 | §10 | 题面 / 题解文档：Markdown → 无头 Chrome → PDF |
+| §11 | 交付目录结构模板：根目录、`data/`、`tools/`、`hydro/`、`下发文件/` 的固定形态、命名约定与交付前必检清单 |
 | 常见坑 | 实际踩过的坑，含 PDF 提取、Lemon 退出码、clamp 送分、PowerShell 编码等 |
 
 ## 适用与不适用

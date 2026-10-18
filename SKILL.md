@@ -277,6 +277,7 @@ int main(int argc, char *argv[]) {
   4. **确认没顺手改坏数据**：交付前用 sha256 清单比对全部 `.in/.out`（只应新增 checker 文件）。
   5. 实测最坏数据的比较器耗时，写进 README。
 - 向用户交付：数据路径、每题规模/特殊性质覆盖说明、两个比较器路径与配置方法、Hydro zip 路径（若导出），以及**标程/题解来源与状态**，并说明哪些档存在保留意见/不确定点（如从图片 PDF 读取的分档数字、语义歧义如“选出不超过 3 个”是否允许重复）。
+- **目录就按 §11 的模板建**：根目录、`data/`、`tools/`、`hydro/`、`下发文件/` 的文件名都是固定的，脚本按名互相调用，不要临时发明新的层级或改名。
 
 ## 9. 下发文件（附加样例）
 
@@ -309,6 +310,101 @@ int main(int argc, char *argv[]) {
 8. **打印完必须自检**：把 PDF 文字层抽出来（仓库里的 `pdftext2.py` 之类），断言里面**没有残留 `$`、`\begin{`、`\sum`、`\max`、`\#`、`\underbrace` 等 LaTeX 记号**。正文不使用裸美元号，所以**出现单个 `$` 就说明有公式没排出来**——只查 `$$` 是不够的，单行 `$...$` 失败会整片漏过去。
 9. **Markdown 是唯一真源**：题面、题解都用 `.md` 维护，PDF 由它生成；分题文件 + 一个拼装脚本产出单文件，避免同一段内容多处手改。拼装时只对**代码块之外**的 ATX 标题降级——`#include <bits/stdc++.h>` 被改成 `##include` 就毁了。
 10. **改一处要重建全部**：改题面措辞或 I/O 约定，会连带影响题面 PDF、题解 PDF、`problem_zh.md`、Hydro zip、下发文件 zip（里面附了题面 PDF）以及各处 README——重建后把 §8 的复核脚本再跑一遍。
+
+## 11. 交付目录结构模板（照这个建目录，别临时发明）
+
+下面这套目录是**按 §1–§10 全流程跑通并复核过**的落地形态（三题 J 组规模）。新任务直接照它建，
+文件名不要换：脚本之间就是靠这些名字互相引用的——`statement/<题目>.md` 是 `problem_zh.md` 的真源，
+`data/<题目>/<n>.in` 就是 `config.yaml` 里的 case，`verify_<题目>` 与 `cheese_<题目>` 由
+`verify_all.py` / `anticheese.py` **按名**调用，改名就得同步改脚本。
+
+```
+<比赛目录>/                            # 一场比赛的根目录，用比赛名
+├── problems.md                        # 【题面真源】合卷：封面表 + 各题，题与题之间用页分隔 div
+├── solution.md                        # 【题解真源】合卷：每题一节（§0.3 用户要才写）
+├── statement/
+│   └── <题目>.md                      # 单题题面 = problems.md 的逐字节切片（Hydro problem_zh.md 的真源）
+├── source/
+│   ├── std/<题目>.cpp                 # 标程（§0.2；来源必须标注官方 / 自建）
+│   └── checker.cpp                    # 仅 SPJ：Lemon 侧比较器，与 testlib.h 同目录（§4.1）
+├── data/
+│   ├── README.md                      # ★ 测试数据总说明：分档表、防骗分表、复核结果、保留意见
+│   └── <题目>/
+│       ├── gen_<题目>.cpp             # 生成器：默认写 1..N.in；validate 复核磁盘；samples 出附加样例
+│       ├── gen.exe                    # 编译产物（可删，重编即可）
+│       ├── 1.in … N.in                # ★ 恰好 N 组（默认 20），编号不补零
+│       ├── 1.out … N.out              # ★ 由标程运行产生，与 .in 同号一一对应
+│       ├── checker.cpp / testlib.h    # 仅 SPJ（与 §4.1 同一份，随数据目录走）
+│       └── README.md                  # 可选：单题分档↔测试点说明（总说明够用时省略）
+├── tools/                             # 全部脚本与复核记录（清单见下表）
+├── hydro/
+│   ├── <题目>/
+│   │   ├── problem.yaml               # title / tag（不含原主办方信息，见 §7）
+│   │   ├── problem_zh.md              # = statement/<题目>.md，逐字节一致
+│   │   └── testdata/
+│   │       ├── config.yaml            # type/time/memory/filename/checker_type + N 个子任务
+│   │       ├── chk.cc                 # 仅 SPJ：Hydro 侧比较器（§4.2）
+│   │       └── 1.in … N.out           # 与 data/<题目>/ 逐字节一致
+│   └── package/
+│       ├── <比赛缩写>-T<序号>-<题目>.zip   # 单题包
+│       └── <比赛缩写>-all.zip              # 合集包（多题一次导入）
+├── 下发文件/                            # 与题面一起发给选手（§9）
+│   ├── README.md                      # 样例一览表 + 用法 + 比较口径 + 编译选项
+│   ├── <比赛名>.pdf                    # 题面 PDF（§10）
+│   └── <题目>/<题目>1.in|.ans …         # 每题 3~5 组逐级放大，不与评测点重复
+├── <比赛名>.pdf                        # 题面合卷 PDF
+├── <比赛名>-题解.pdf                   # 题解 PDF（用户要才出）
+├── <比赛名>-data.zip                   # 工程包：题面 + 标程 + 生成器 + N 组数据 + README
+├── <比赛名>-std.zip                    # 工程包：标程 + 全部脚本
+└── <比赛名>-下发文件.zip                 # 下发文件整包（含题面 PDF）
+```
+
+`tools/` 的固定清单（文件名固定）：
+
+| 文件 | 作用 | 章节 |
+|---|---|---|
+| `README.md` | 一键流程 + 脚本清单 + 环境坑（解释器、执行策略、管道限制） | — |
+| `split_statement.py` | 合卷 `problems.md` → `statement/<题目>.md`；断言切片是逐字节子串、非空行数守恒 | §10.9 |
+| `extract_std.py` | 从 `solution.md` 抽每题【参考代码】→ `source/std/<题目>.cpp`；`--check` 复核磁盘副本 | §0.2 |
+| `statement_samples.py` | 从题面解析印出的样例 → `tools/smoke/<题目>/<n>.{in,out}` | §5 |
+| `build_stds.ps1` | 编译标程（`-O2 -std=gnu++14 -static -Wl,--stack,…`） | §5 |
+| `smoke.py` | 标程 vs 题面样例，逐字节比对（忽略行末空格与文末换行） | §5 |
+| `run_std.py` | 逐点跑标程写 `.out`，打印退出码 / 耗时 / 输出字节数，统一行尾 | §5 |
+| `verify_<题目>.cpp` | **每题一份独立实现**（换算法，不是抄标程），带 `selftest` / `all` / `run` 三个模式 | §8 |
+| `verify_all.py` | 编译校验器 → `selftest` → N 点复核 → 每题数百组随机差分 → `verification_report.txt` | §8 |
+| `cheese_<题目>.cpp` | 骗分策略集合，含一个正确 `std` 模式用于 harness 自检 | §6.1 |
+| `anticheese.py` | 逐策略跑满 N 点算分、断言上限 → `anticheese_report.txt` | §6.3 |
+| `make_hydro.py` / `verify_hydro.py` | 打 Hydro 包 / 独立重开 zip 复核结构与字节 | §7 |
+| `make_samples.py` | 附加样例（另一套配方 + 种子）+ `.ans` + 独立复核 + 断言不重复 → `下发文件/` 与 zip | §9 |
+| `make_archives.py` | `-data.zip` / `-std.zip`，逐条目比对字节（含排除表） | §8 |
+| `check_delivery.py` | 交付目录 vs 构建目录**逐文件 sha256** 对账 → `sha256_manifest.txt` | §8 |
+| `build_pdf.py` / `build_solution_pdf.py` / `pdftext2.py` | 排两份 PDF / 抽文字层自检（自带极简 Markdown 转换器，不依赖 `markdown` 包） | §10 |
+| `verification_report.txt` / `anticheese_report.txt` / `smoke_report.txt` | 三步复核的完整记录，随包交付 | §8 |
+
+命名与格式的硬约定：
+
+- **`<题目>` 一律取封面表的「目录」列**（它同时是可执行文件名与 `<题目>.in` / `<题目>.out` 的前缀）：
+  `data/<题目>/`、`statement/<题目>.md`、`hydro/<题目>/`、`source/std/<题目>.cpp`、`verify_<题目>.cpp`、
+  `cheese_<题目>.cpp` 必须用同一个词。
+- **数据文件编号不补零**：`1.in` … `20.in`（不是 `01.in`），`.out` 与 `.in` 同号。
+- **行尾统一 LF + 恰好一个结尾换行**；`.out` 只做行尾归一，数值完全来自标程。
+- 交付目录里**只放交付物**：编译产物、临时输入输出、`smoke/`、`*_build/`、`pdf_scratch/` 一律由脚本
+  重建、不进包（`make_archives.py` 里维护排除表）。
+- SPJ 题：`checker.cpp` 放 `data/<题目>/`（与 `testlib.h` 同目录，Lemon 按相对路径找），`chk.cc` 放
+  `hydro/<题目>/testdata/`（与 `config.yaml` 同目录），两份判定规则必须一致（§4）。
+
+交付前"必须存在"清单（配合 §8 逐条打勾）：
+
+1. `data/<题目>/` 恰好 N 个 `.in` + N 个 `.out`，**没有多余文件**（临时文件、临时样例都要清）；
+2. `tools/` 下三份报告齐全；`anticheese` 里每题的 `std` 策略都是 100 分；
+3. 两份 PDF 存在，且文字层自检无 LaTeX 残留；
+4. 至少一份 Hydro zip 通过 `verify_hydro.py`（含 `problem_zh.md` 与全部 case）；
+5. `下发文件/` 里每组样例的 `.ans` 都由标程产生、独立复核、且与评测点零重复；
+6. `check_delivery.py` 报 OK（交付目录与构建目录逐文件一致）。
+
+**目标目录写入受限时**：另建一个**临时构建目录**，把上面这套结构完整生成并复核，最后整体拷进
+交付目录，再用 `check_delivery.py` 做逐文件 sha256 对账。所有脚本都按 `__file__` 推导路径，
+所以整棵树可以搬移，搬完还能在原地重跑全部复核。
 
 ## 常见坑
 
