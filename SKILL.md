@@ -121,7 +121,7 @@ whenToUse: User asks to 造数据/出数据/生成测试数据 based on 题面(s
 
 | 产物 | 放置位置 | 评测机 | 入口 |
 |---|---|---|---|
-| `checker.cpp`（编译成 `checker.exe`） | `data/<prob>/`（数据真源目录，与 `testlib.h` 同目录） | Lemon / LemonLime | `registerLemonChecker(argc, argv)` |
+| `checker.cpp`（编译成 `checker.exe`） | `data/<prob>/`（数据真源目录，与 `testlib.h` 同目录） | Lemon / LemonLime | lemon 模式（六参数自写分数文件）或 `registerLemonChecker` / `registerTestlibCmd` |
 | `chk.cc` | `hydro/<prob>/testdata/`（与 `config.yaml` 同目录） | Hydro 导入包 | `registerTestlibCmd(argc, argv)` |
 
 - `.out` 仍然由标程生成并随包提供（Hydro 的 `config.yaml` 必须写 `output: i.out`），但**两个比较器都不要读它**：构造题答案不唯一，把 `.out` 当真值会让“换标程/换构造”直接失效。
@@ -190,6 +190,37 @@ int main(int argc, char *argv[]) {
 - 打包与复核脚本（如 `tools/make_hydro.py`、`tools/verify_hydro.py`）通常**硬编码**了比较器文件名：新增/改名时要同步这些脚本，并把 `chk.cc` 一起打进 zip、断言 zip 内存在该条目。
 - README 里显式记录两份比较器的差异（例：Lemon 版用 `ouf.seekEof()` 判脏输出为 `_pe`，Hydro 版忽略 `m` 之后的额外 token）。
 - 落地形态参考：一道构造题的产物就是「数据真源目录下的 `checker.cpp` + Hydro 包内 `testdata/chk.cc`」这一对文件，两边共用同一套判定规则、在同一边界语料上各自回归（§8 的 SPJ 五步）。
+
+### 4.3 LemonLime 侧四个必查项（否则一律报“校验器没有被正确配置”）
+
+LemonLime 手册（<https://project-lemonlime.github.io/Project_LemonLime/contest/>，见“自定义校验器（SPJ）说明”）
+与源码（`src/core/judgingthread.cpp` 的 `lemonSpecialJudge()`）合起来看，只有四条会踩：
+
+1. **路径相对 `data` 目录**：`specialJudge` 填的是相对**数据目录**的路径（评测时拼成 `<比赛目录>/data/<这里>`），
+   测试点的 `inputFiles` / `outputFiles` 同样相对 `data`。填绝对路径、或在别处建目录联接，一律判
+   `InvalidSpecialJudge`（实测 result 8），而且校验器**根本不会启动**（不会留下任何运行痕迹）。
+2. **lemon 模式**：Lemon 按顺序传六个参数 `in out ans full_score score_file report_file`，
+   **分数文件必须由校验器自己创建**并写入一个非负整数；`argv[3]` 可以不读（答案不唯一时本来就不该读）。
+   也可以用 testlib 模式（`registerTestlibCmd`），但 lemon 模式不依赖 testlib 版本，也不会因为
+   打不开答案文件而在 `_fail` 分支里崩——本 skill 实测推荐 lemon 模式。
+3. **静态链接**：Lemon 启动校验器时 PATH 里没有 MinGW 的 bin 目录，动态链接版会因缺
+   `libstdc++-6.dll` / `libgcc_s_seh-1.dll` 直接退出（`0xC0000135`），表现为启动失败。
+   用 `g++ -O2 -std=c++14 -static` 编译。
+4. **可执行文件的完整性标记**（最隐蔽，值得单独记）：Windows 启动进程时，**进程的完整性级别取可执行文件
+   自身的标记**。如果校验器是在一个带 Low 标记的目录里编出来的（受限沙箱、被 DLP/ACL 工具收紧过的工作区都算），
+   它启动出的进程也是 Low；Low 进程写不了 `%TEMP%`（Medium），而 Lemon 的 `_score` / `_message` 恰好在那里 ——
+   校验器能启动、也 `exit 0`，但分数文件建不出来，Lemon 读不到 `_score` 就报 `InvalidSpecialJudge`。
+   没有管理员权限也能修：**把校验器编到一个与数据目录同盘、但不在受限目录里的文件夹，再用 `Move-Item`
+   移进来**（同盘移动保留安全描述符）；或者反过来，把整个比赛目录放到受限目录之外。
+
+`InvalidSpecialJudge` 的判定语义（源码）：`!judge->waitForStarted(-1)` → 启动失败；
+`!scoreFile.open(ReadOnly)` / 分数读不出 / 分数为负 → 也算它。`judge->exitCode() != 0` 报的是
+`SpecialJudgeRunTimeError`（另一个 result code）。所以看到“校验器没有被正确配置”先查上面两类，
+不要去改判定逻辑。
+
+**验证方式要能证明“写得进分数文件”**：让校验器按 Lemon 的真实调用跑一次，把 `score_file` 指到
+`%TEMP%` 下的临时目录，断言文件真的出现且内容等于满分；只跑本地 `--validate` 只能证明判定逻辑正确，
+证明不了评测机启动得了它、也证明不了它能写分数文件。建议把这条做成回归脚本里的固定一步。
 
 ## 5. 编译与生成 .out
 
@@ -416,6 +447,10 @@ int main(int argc, char *argv[]) {
 - 标程语义与题面冲突时仍按题面手写 .out → 与官方不符；一律以标程输出为准。
 - 答案不唯一却用 `checker_type: default` → 合法解被判错（见 §4）。
 - 比较器用退出码表达 AC/WA → Lemon 忽略退出码，非 0 反而被当评测失败；分数必须写进 `argv[5]`（用 `registerLemonChecker` 时由 testlib 代写）。
+- `specialJudge` 与测试点路径**相对 `data` 目录**，填绝对路径或在别处建目录联接 → Lemon 判 `InvalidSpecialJudge`（实测 result 8），校验器根本不会启动。
+- 校验器动态链接 → Lemon 启动时缺 `libstdc++-6.dll` 等，以 `0xC0000135` 退出；必须 `-static`。
+- 校验器是在带 Low 完整性标记的目录里编出来的 → 它启动的进程也是 Low，写不了 `%TEMP%` 里 Lemon 的 `_score`，同样报 `InvalidSpecialJudge`（"校验器没有被正确配置"）；把编译产物编到受限目录外再同盘移入即可（详见 §4.3）。
+- 只跑本地 `--validate` 就交付 SPJ → 它只证明判定逻辑，证明不了评测机启动得了它、更证明不了它能写分数文件；回归要按 Lemon 的真实调用把 `score_file` 指到 `%TEMP%` 验一次。
 - 手写 argv 解析而不先确认目标评测机约定（经典 Lemon 六参数 vs LemonLime testlib vs Hydro 三参数）→ 参数错位、把 `argv[3]` 当分数文件之类。
 - Lemon 报告文件里写中文 → 部分版本乱码；改成 ASCII + README 中文对照表。
 - 本地 `--validate` 模式忘记 `disableFinalizeGuard()` → 正常 `return` 时被 testlib 收尾守卫 `_fail`（`Call register-function in the first line of the main`）。
